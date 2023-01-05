@@ -6,6 +6,7 @@ use DOMDocument;
 use Illuminate\Mail\Events\MessageSending;
 use Symfony\Component\Mime\Message;
 use Symfony\Component\Mailer\Event\MessageEvent;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\Part\AbstractPart;
 use Symfony\Component\Mime\Part\Multipart\AlternativePart;
 use Symfony\Component\Mime\Part\TextPart;
@@ -28,22 +29,24 @@ class CssInlinerPlugin
     {
         $message = $event->message;
 
-        if (!$message instanceof Message) {
-            return;
+        if ($message instanceof Email) {
+            $this->handleSymfonyEmail($message);
         }
-
-        $this->handleSymfonyMessage($message);
+        else if ($message instanceof Message) {
+            $this->handleSymfonyMessage($message);
+        }
     }
 
     public function handleSymfonyEvent(MessageEvent $event): void
     {
         $message = $event->getMessage();
 
-        if (!$message instanceof Message) {
-            return;
+        if ($message instanceof Email) {
+            $this->handleSymfonyEmail($message);
         }
-
-        $this->handleSymfonyMessage($message);
+        else if ($message instanceof Message) {
+            $this->handleSymfonyMessage($message);
+        }
     }
 
     private function processPart(AbstractPart $part): AbstractPart
@@ -92,6 +95,19 @@ class CssInlinerPlugin
                     $body->getParts()
                 )
             ));
+        }
+    }
+
+    private function handleSymfonyEmail(Email $email): void
+    {
+        $this->handleSymfonyMessage($email);
+
+        if (!is_null($email->getHtmlBody())) {
+            [$cssFiles, $bodyString] = $this->extractCssFilesFromMailBody($email->getHtmlBody());
+
+            $bodyString = $this->converter->convert($bodyString, $this->cssToAlwaysInclude . "\n" . $this->loadCssFromFiles($cssFiles));
+
+            $email->html($bodyString);
         }
     }
 
